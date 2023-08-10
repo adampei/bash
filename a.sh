@@ -22,7 +22,7 @@ threads = 2
 socket = /var/run/${dir_name}.sock
 vacuum = true
 die-on-term = true
-
+env = DJANGO_DEBUG=false
 chown-socket = www-data:www-data
 chmod-socket = 666
 uid = www-data
