@@ -35,7 +35,7 @@ virtualenv = $current_dir/$virtualenv_name
 mkdir -p conf
 echo "$uwsgi_config" > conf/uwsgi.ini
 
-echo "\033[32muwsgi 配置文件已保存到 conf/uwsgi.ini\033[0m"
+echo -e "\033[32muwsgi 配置文件已保存到 conf/uwsgi.ini\033[0m"
 
 # 询问用户输入域名
 read -p "请输入您的域名（不包括www）: " domain_name
@@ -77,7 +77,7 @@ echo "$nginx_config" | sudo tee $nginx_config_file > /dev/null
 # 重启 Nginx
 sudo systemctl restart nginx
 
-echo "\033[32mNginx 配置文件已保存到 $nginx_config_file，并且 Nginx 已重启。\033[0m"
+echo -e "\033[32mNginx 配置文件已保存到 $nginx_config_file，并且 Nginx 已重启。\033[0m"
 
 
 # 创建 log 目录
@@ -116,7 +116,7 @@ echo "$supervisor_config" | sudo tee $supervisor_config_file > /dev/null
 echo -e "\033[32mSupervisor 配置文件已保存到 $supervisor_config_file\033[0m"
 
 # 重新加载 Supervisor 配置
-echo "\033[32m重新加载supervisor配置文件\033[0m"
+echo -e "\033[32m重新加载supervisor配置文件\033[0m"
 sudo supervisorctl reread
 sudo supervisorctl update
-echo "\033[32msupervisor配置文件加载完成\033[0m"
+echo -e "\033[32msupervisor配置文件加载完成\033[0m"
