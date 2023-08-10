@@ -82,6 +82,7 @@ echo -e "\033[32mNginx 配置文件已保存到 $nginx_config_file，并且 Ngin
 
 # 创建 log 目录
 mkdir -p log
+echo -e "\033[32m创建log目录完成\033[0m"
 
 # 构建 Supervisor 配置文件的内容
 # 使用当前目录名称作为程序名称
