@@ -96,7 +96,7 @@ supervisor_config="[program:${program_name}]
 command=${current_dir}/env/bin/uwsgi --ini ${current_dir}/conf/uwsgi.ini
 directory=${current_dir}
 stdout_logfile=${current_dir}/log/stdout.log
-stderr_logfile=${current_dir}/log/error.log
+stderr_logfile=${current_dir}/log/stdout.log
 
 process_name=%(program_name)s
 autorestart=true
