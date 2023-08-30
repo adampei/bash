@@ -27,6 +27,7 @@ chown-socket = www-data:www-data
 chmod-socket = 666
 uid = www-data
 gid = www-data
+limit-post = 104857600
 ;这是虚拟路径
 virtualenv = $current_dir/$virtualenv_name
 "
@@ -45,6 +46,8 @@ nginx_config="server {
     server_name $domain_name www.$domain_name;
     listen 80;
     listen [::]:80;
+    # 增加此行来设置最大请求体大小
+    client_max_body_size 100M;
     location / {
         include uwsgi_params;
         uwsgi_connect_timeout 30;
