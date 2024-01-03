@@ -23,20 +23,23 @@ if [ -z "$FILE_PATH" ]; then
 fi
 
 # 使用dialog创建一个菜单，让用户选择一个服务器
-SERVER_NAME=$(
-    dialog --clear \
-        --backtitle "Choose a server" \
-        --title "Choose a server" \
-        --menu "Choose one of the following options:"
-    # 高度, 宽度, 菜单数量
+dialog --clear \
+    --backtitle "Choose a server" \
+    --title "Choose a server" \
+    --menu "Choose one of the following options:" \
     15 100 3 \
-        "hz" "speech,sheetrules" \
-        "netcup" "imagetotext" \
-        "server3" "文本3" \
-        2>&1 >/dev/tty
-)
+    "hz" "speech,sheetrules" \
+    "netcup" "imagetotext" \
+    "server3" "文本3" 2> /tmp/server_choice
 
-clear
+# 检查dialog命令的退出状态
+if [ $? -eq 0 ]; then
+    SERVER_NAME=$(cat /tmp/server_choice)
+    rm -f /tmp/server_choice
+else
+    echo -e "\033[31mError: No server was selected.\033[0m"
+    exit 1
+fi
 
 # 根据服务器名设置服务器IP地址
 case "$SERVER_NAME" in

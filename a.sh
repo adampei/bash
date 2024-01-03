@@ -77,8 +77,12 @@ nginx_config_file="/etc/nginx/sites-enabled/${dir_name}.conf"
 # 使用 sudo 权限将配置内容写入文件
 echo "$nginx_config" | sudo tee $nginx_config_file > /dev/null
 
+# 打印重新nginx
+echo -e "\033[32m重新加载nginx配置文件\033[0m"
 # 重启 Nginx
 sudo systemctl restart nginx
+# 打印nginx重启完成
+echo -e "\033[32mnginx配置文件加载完成\033[0m"
 
 echo -e "\033[32mNginx 配置文件已保存到 $nginx_config_file，并且 Nginx 已重启。\033[0m"
 
