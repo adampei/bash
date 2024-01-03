@@ -7,9 +7,6 @@ domain_name=$2
 # 从提供的路径中获取项目名称（假设路径的最后一部分是项目名称）
 dir_name=$(basename "$project_path")
 
-# 询问用户输入域名
-read -p "请输入您的域名（不包括www）: " domain_name
-
 # 构建 uwsgi.ini 文件的内容
 uwsgi_config="[uwsgi]
 chdir = $project_path
