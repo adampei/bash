@@ -36,8 +36,7 @@ dir_name=$(basename "$project_path")
 # 创建日志目录并设置权限
 log_dir="$project_path/log"
 mkdir -p "$log_dir"
-sudo chown www-data:www-data "$log_dir"
-sudo chmod 755 "$log_dir"
+sudo chmod 777 "$log_dir"
 echo "日志目录已创建并设置权限: $log_dir"
 
 
