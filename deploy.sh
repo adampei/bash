@@ -1,8 +1,34 @@
 #!/bin/bash
 
-# 使用命令行参数
-project_path=$1
-domain_name=$2
+# 初始化变量
+domain_name=""
+project_path=""
+
+# 循环遍历所有参数
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --domain|-d)
+            domain_name="$2"
+            shift # 移过参数值
+            shift # 移过参数名
+            ;;
+        --path|-p)
+            project_path="$2"
+            shift # 移过参数值
+            shift # 移过参数名
+            ;;
+        *)
+            shift # 移过未知参数
+            ;;
+    esac
+done
+
+# 检查是否所有必需的参数都被设置
+if [ -z "$domain_name" ] || [ -z "$project_path" ]; then
+    echo "缺少必需的参数。"
+    echo "用法: $0 --domain <域名> --path <项目路径>"
+    exit 1
+fi
 
 # 从提供的路径中获取项目名称（假设路径的最后一部分是项目名称）
 dir_name=$(basename "$project_path")
@@ -70,7 +96,7 @@ echo "$nginx_config" | sudo tee "$nginx_config_file" > /dev/null
 # 重启 Nginx
 sudo systemctl restart nginx
 
-echo -e "\033[32mNginx 配置文件已保存到 $nginx_config_file，并且 Nginx 已重启。\033[0m"
+echo -e "\033[32mNginx 配置文件已保存到  $nginx_config_file  ,并且 Nginx 已重启。\033[0m"
 
 # 构建 Supervisor 配置文件的内容
 supervisor_config="[program:${dir_name}]
