@@ -33,6 +33,14 @@ fi
 # 从提供的路径中获取项目名称（假设路径的最后一部分是项目名称）
 dir_name=$(basename "$project_path")
 
+# 创建日志目录并设置权限
+log_dir="$project_path/log"
+mkdir -p "$log_dir"
+sudo chown www-data:www-data "$log_dir"
+sudo chmod 755 "$log_dir"
+echo "日志目录已创建并设置权限: $log_dir"
+
+
 # 构建 uwsgi.ini 文件的内容
 uwsgi_config="[uwsgi]
 chdir = $project_path
