@@ -1,7 +1,8 @@
 #!/bin/bash
 
-# 询问用户输入 Django 项目的绝对路径
-read -p "请输入您的 Django 项目的绝对路径: " project_path
+# 使用命令行参数
+project_path=$1
+domain_name=$2
 
 # 从提供的路径中获取项目名称（假设路径的最后一部分是项目名称）
 dir_name=$(basename "$project_path")
