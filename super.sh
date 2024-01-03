@@ -17,6 +17,12 @@ fi
 echo "正在安装 Supervisor..."
 sudo pip3 install supervisor
 
+# 检查 Supervisor 是否正在运行并停止它
+if sudo systemctl is-active --quiet supervisord; then
+    echo "Supervisor 正在运行，正在停止..."
+    sudo systemctl stop supervisord
+fi
+
 # 创建 Supervisor systemd 服务文件
 echo "创建 Supervisor systemd 服务文件..."
 cat <<EOF | sudo tee /etc/systemd/system/supervisord.service
