@@ -28,6 +28,16 @@ if [ ! -z "$pids" ]; then
     done
 fi
 
+# 创建目录
+echo "创建/etc/supervisor /etc/supervisor/conf.d 目录..."
+sudo mkdir -p /etc/supervisor/conf.d
+# 生成默认配置文件
+echo "生成默认配置文件..."
+sudo bash -c "echo_supervisord_conf > /etc/supervisor/supervisord.conf"
+# 在文件末尾添加 files = /etc/supervisor/conf.d/*.conf
+echo "在文件末尾添加 files = /etc/supervisor/conf.d/*.conf..."
+sudo sed -i '$a\\n[include]\nfiles = /etc/supervisor/conf.d/*.conf' /etc/supervisor/supervisord.conf
+
 # 创建 Supervisor systemd 服务文件
 echo "创建 Supervisor systemd 服务文件..."
 cat <<EOF | sudo tee /etc/systemd/system/supervisord.service
