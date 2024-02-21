@@ -23,6 +23,11 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# 检查 project_path 是否以反斜线结尾，并去除它
+if [[ "$project_path" == */ ]]; then
+    project_path="${project_path%/}"
+fi
+
 # 检查是否所有必需的参数都被设置
 if [ -z "$domain_name" ] || [ -z "$project_path" ]; then
     echo "缺少必需的参数。"
