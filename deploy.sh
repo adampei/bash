@@ -30,6 +30,12 @@ if [ -z "$domain_name" ] || [ -z "$project_path" ]; then
     exit 1
 fi
 
+# 更新软件包列表并安装必需的软件
+echo "正在更新软件包列表并安装必需的软件..."
+sudo apt-get update
+sudo apt-get install -y nginx supervisor python3-venv build-essential python3-dev
+
+
 # 从提供的路径中获取项目名称（假设路径的最后一部分是项目名称）
 dir_name=$(basename "$project_path")
 
@@ -57,6 +63,9 @@ uid = www-data
 gid = www-data
 limit-post = 104857600
 virtualenv = $project_path/env
+logto = $log_dir/uwsgi.log
+env = DEBUG=False
+logformat=%(ltime) \"%(method) %(uri) %(proto)\" status=%(status) res-time=%(msecs)ms
 "
 
 # 将内容写入 conf/uwsgi.ini 文件
@@ -115,6 +124,8 @@ stopasgroup=true
 killasgroup=true
 stopwaitsecs=5
 autostart=true
+stderr_logfile=$log_dir/supervisor.log
+stdout_logfile=$log_dir/supervisor.log
 "
 
 # 定义 Supervisor 配置文件的路径
