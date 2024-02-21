@@ -5,3 +5,4 @@
 # Exclude .NET assemblies from source
 *.dll
 
+.idea
