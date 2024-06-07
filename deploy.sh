@@ -53,7 +53,7 @@ mkdir -p "$log_dir"
 sudo chmod -R 777 "$log_dir"
 echo "日志目录已创建并设置权限: $log_dir"
 
-
+# ---------------------------------------------------------------------------------------------------------
 # 构建 uwsgi.ini 文件的内容
 uwsgi_config="[uwsgi]
 chdir = $project_path
@@ -82,6 +82,7 @@ echo "$uwsgi_config" > "$project_path/conf/uwsgi.ini"
 
 echo -e "\033[32muwsgi 配置文件已保存到 $project_path/conf/uwsgi.ini\033[0m"
 
+# ---------------------------------------------------------------------------------------------------------
 # 构建 Nginx 配置文件的内容
 nginx_config="server {
     server_name $domain_name www.$domain_name;
@@ -122,6 +123,7 @@ sudo systemctl restart nginx
 
 echo -e "\033[32mNginx 配置文件已保存到  $nginx_config_file  ,并且 Nginx 已重启。\033[0m"
 
+# ---------------------------------------------------------------------------------------------------------
 # 构建 Supervisor 配置文件的内容
 supervisor_config="[program:${dir_name}]
 command=${project_path}/env/bin/uwsgi --ini ${project_path}/conf/uwsgi.ini
@@ -147,6 +149,47 @@ sudo mkdir -p "$supervisor_config_path"
 echo "$supervisor_config" | sudo tee "$supervisor_config_file" > /dev/null
 
 echo -e "\033[32mSupervisor 配置文件已保存到 $supervisor_config_file\033[0m"
+
+# ---------------------------------------------------------------------------------------------------------
+# 构建 Celery Supervisor 配置文件的内容
+# 检查 run_celery.sh 是否存在
+if [ -f "$project_path/run_celery.sh" ]; then
+  # 安装 Redis
+  echo "正在安装 Redis..."
+  sudo apt-get install -y redis-server
+
+  # 启动 Redis 服务
+  sudo systemctl start redis-server
+  sudo systemctl enable redis-server
+  sudo systemctl status redis-server
+  echo -e "\033[32mRedis 服务已启动。\033[0m"
+#  睡眠2秒
+  sleep 2
+  echo "正在配置 Celery 进程守护"
+    # 构建 Celery Supervisor 配置文件的内容
+  celery_supervisor_config="[program:${dir_name}_celery]
+command=bash $project_path/run_celery.sh
+directory=$project_path
+autostart=true
+autorestart=true
+startsecs=10
+stopasgroup=true
+killasgroup=true
+user=www-data
+numprocs=1
+redirect_stderr=true
+stdout_logfile=$log_dir/celery.log
+stderr_logfile=$log_dir/celery_error.log
+"
+    # 写入 Celery Supervisor 配置文件
+    echo "$celery_supervisor_config" | sudo tee -a "$supervisor_config_file" > /dev/null
+
+    echo -e "\033[32mCelery Supervisor 配置已添加。\033[0m"
+else
+    echo -e "\033[33m未找到 run_celery.sh，跳过 Celery 配置。\033[0m"
+fi
+
+
 
 # 重新加载 Supervisor 配置
 sudo supervisorctl reread
