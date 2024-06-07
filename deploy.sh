@@ -35,6 +35,9 @@ if [ -z "$domain_name" ] || [ -z "$project_path" ]; then
     exit 1
 fi
 
+# 获取CPU核心数
+cpu_cores=$(nproc)
+
 # 更新软件包列表并安装必需的软件
 echo "正在更新软件包列表并安装必需的软件..."
 sudo apt-get update
@@ -56,8 +59,8 @@ uwsgi_config="[uwsgi]
 chdir = $project_path
 module = ${dir_name}.wsgi
 master = true
-processes = 4
-threads = 4
+processes = $cpu_cores
+threads = $cpu_cores
 socket = /var/run/${dir_name}.sock
 vacuum = true
 die-on-term = true
