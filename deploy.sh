@@ -64,7 +64,6 @@ threads = $cpu_cores
 socket = /var/run/${dir_name}.sock
 vacuum = true
 die-on-term = true
-env = DJANGO_DEBUG=false
 chown-socket = www-data:www-data
 chmod-socket = 666
 uid = www-data
@@ -72,7 +71,7 @@ gid = www-data
 limit-post = 104857600
 virtualenv = $project_path/env
 logto = $log_dir/uwsgi.log
-env = DEBUG=False
+env = DEBUG=no
 logformat=%(ltime) \"%(method) %(uri) %(proto)\" status=%(status) res-time=%(msecs)ms
 "
 
