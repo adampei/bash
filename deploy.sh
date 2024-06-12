@@ -77,7 +77,7 @@ logto = $log_dir/uwsgi.log
 logformat=%(ltime) \"%(method) %(uri) %(proto)\" status=%(status) res-time=%(msecs)ms
 
 harakiri = 60                        ; forcefully kill workers after 60 seconds,
-py-callos-afterfork = true           ; allow workers to trap signals
+py-call-osafterfork = true           ; allow workers to trap signals
 
 max-requests = 1000                  ; Restart workers after this many requests
 max-worker-lifetime = 3600           ; Restart workers after this many seconds
