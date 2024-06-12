@@ -75,14 +75,10 @@ need-app = true
 ;log-5xx = true                       ; and 5xx's, 以及5xx
 ;logto = $log_dir/uwsgi.log
 ; 定义标准输出日志文件
-;logger = file:logfile=$log_dir/stdout.log,maxsize=100000000
+logger = file:logfile=$log_dir/stdout.log,maxsize=100000000,expr={status:lt(400)}
 ; 定义错误输出日志文件
-;logger = file:logfile=$log_dir/stderr.log,maxsize=100000000,expr={status:ge(400)}
-
-logger = file:logfile=$log_dir/stdout.log,maxsize=100000000
 logger = file:logfile=$log_dir/stderr.log,maxsize=100000000,expr={status:ge(400)}
-log-route = stderr {status:ge(400)}
-log-route = stdout {status:lt(400)}
+
 logformat=%(ltime) \"%(method) %(uri) %(proto)\" status=%(status) res-time=%(msecs)ms
 
 harakiri = 60                        ; forcefully kill workers after 60 seconds,
