@@ -226,4 +226,4 @@ sudo supervisorctl reread
 sudo supervisorctl update
 sudo supervisorctl restart all
 
-echo -e "\033[32msupervisor配置文件加载完成\033[0m"
+echo -e "\033[32msupervisor配置文件加载完成,supervisor重启完毕\033[0m"
