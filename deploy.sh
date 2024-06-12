@@ -70,10 +70,14 @@ single-interpreter = true
 die-on-term = true                   ; Shutdown when receiving SIGTERM (default is respawn)
 need-app = true
 
-disable-logging = true               ; Disable built-in logging, 禁用内置日志,提高性能
+;disable-logging = true               ; Disable built-in logging, 禁用内置日志,提高性能
 ;log-4xx = true                       ; but log 4xx's anyway, 但是仍然记录4xx
 ;log-5xx = true                       ; and 5xx's, 以及5xx
-logto = $log_dir/uwsgi.log
+;logto = $log_dir/uwsgi.log
+; 定义标准输出日志文件
+logger = file:logfile=$log_dir/stdout.log,maxsize=100000000
+; 定义错误输出日志文件
+logger = file:logfile=$log_dir/stderr.log,maxsize=100000000,expr={status:ge(400)}
 logformat=%(ltime) \"%(method) %(uri) %(proto)\" status=%(status) res-time=%(msecs)ms
 
 harakiri = 60                        ; forcefully kill workers after 60 seconds,
