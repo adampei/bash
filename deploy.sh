@@ -231,7 +231,6 @@ logrotate_config="/var/log/${dir_name}/*.log {
     delaycompress        # 延迟压缩
     missingok            # 如果日志文件丢失不报错
     notifempty           # 日志文件为空不轮换
-    create 0640 www-data www-data  # 确保这里的权限、用户和组是正确的
     sharedscripts
     postrotate
         if [ -f /var/run/${dir_name}.pid ]; then
