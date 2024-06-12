@@ -102,6 +102,7 @@ cheaper-busyness-min = 20            ; Below this threshold, kill workers (if st
 cheaper-busyness-max = 70            ; Above this threshold, spawn new workers
 cheaper-busyness-backlog-alert = 16  ; Spawn emergency workers if more than this many requests are waiting in the queue
 cheaper-busyness-backlog-step = 2    ; How many emergency workers to create if there are too many requests in the queue
+plugin = logfile
 ; 配置日志
 ; 定义常规日志文件处理器
 logger = file_normal file:logfile=$log_dir/stdout.log,maxsize=100000000
@@ -110,7 +111,7 @@ logger = file_error file:logfile=$log_dir/stderr.log,maxsize=100000000
 ; 将状态码小于 400 的日志路由到常规日志文件
 log-route = file_normal ^\d+\.\d+\.\d+\.\d+:\d+\s+\d+\s+(1..|2..|3..)
 ; 将状态码大于或等于 400 的日志路由到错误日志文件
-log-route = file_error ^\d+\.\d+\.\d+\.\d+:\d+\s+\d+\s+(4..|5..)
+log-route = file_error HTTP/1.\d\s+4\d\d
 ; 定义日志格式
 logformat=%(ltime) \"%(method) %(uri) %(proto)\" status=%(status) res-time=%(msecs)ms
 "
