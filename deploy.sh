@@ -184,6 +184,10 @@ echo -e "\033[32mSupervisor 配置文件已保存到 $supervisor_config_file\033
 # 构建 Celery Supervisor 配置文件的内容
 # 检查 run_celery.sh 是否存在
 if [ -f "$project_path/run_celery.sh" ]; then
+  echo "正在停止旧的 Celery 进程..."
+  sudo supervisorctl stop "${dir_name}_celery"
+  sleep 5  # 等待旧进程停止
+
   # 安装 Redis
   echo "正在安装 Redis..."
   sudo apt-get install -y redis-server
@@ -224,5 +228,6 @@ fi
 # 重新加载 Supervisor 配置
 sudo supervisorctl reread
 sudo supervisorctl update
+sudo supervisorctl restart all
 
 echo -e "\033[32msupervisor配置文件加载完成\033[0m"
