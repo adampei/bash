@@ -225,9 +225,9 @@ echo -e "\033[32m设置日志轮换\033[0m"
 sleep 1
 # 定义 logrotate 配置文件内容
 logrotate_config="/var/log/${dir_name}/*.log {
-    daily                # 每天轮换日志
-    rotate 14            # 保留 14 个旧日志备份
-    compress             # 压缩日志文件
+    weekly
+    rotate 14
+    compress
     delaycompress        # 延迟压缩
     missingok            # 如果日志文件丢失不报错
     notifempty           # 日志文件为空不轮换
@@ -244,7 +244,7 @@ echo "$logrotate_config" | sudo tee "/etc/logrotate.d/$dir_name" > /dev/null
 echo -e "\033[32m日志轮换配置已保存到 /etc/logrotate.d/$dir_name\033[0m"
 echo -e "\033[32m执行测试日志轮换命令\033[0m"
 # 测试 logrotate 配置是否有语法错误
-sudo logrotate -d "/etc/logrotate.d/$dir_name"
+sudo logrotate -v /etc/logrotate.d/"$dir_name"
 sleep 1
 echo -e "\033[32m日志轮换配置测试完成\033[0m"
 
