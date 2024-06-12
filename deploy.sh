@@ -219,7 +219,34 @@ else
     echo -e "\033[33m未找到 run_celery.sh，跳过 Celery 配置。\033[0m"
 fi
 
+#---------------------------------------------------------------------------------------------------------
+# 设置日志轮换
+echo -e "\033[32m设置日志轮换\033[0m"
+sleep 2
+# 定义 logrotate 配置文件内容
+logrotate_config="/var/log/${dir_name}/*.log {
+    daily                # 每天轮换日志
+    rotate 14            # 保留 14 个旧日志备份
+    compress             # 压缩日志文件
+    delaycompress        # 延迟压缩
+    missingok            # 如果日志文件丢失不报错
+    notifempty           # 日志文件为空不轮换
+    create 640 www-data www-data   # 创建新日志文件的权限和所有者
+    sharedscripts
+    postrotate
+        if [ -f /var/run/${dir_name}.pid ]; then
+            kill -USR1 \`cat /var/run/${dir_name}.pid\`
+        fi
+    endscript
+}"
 
+echo "$logrotate_config" | sudo tee "/etc/logrotate.d/$dir_name" > /dev/null
+echo -e "\033[32m日志轮换配置已保存到 /etc/logrotate.d/$dir_name\033[0m"
+echo -e "\033[32m执行测试日志轮换命令\033[0m"
+# 测试 logrotate 配置是否有语法错误
+sudo logrotate -d "/etc/logrotate.d/$dir_name"
+sleep 1
+echo -e "\033[32m日志轮换配置测试完成\033[0m"
 
 # 重新加载 Supervisor 配置
 sudo supervisorctl reread
