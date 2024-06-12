@@ -83,6 +83,16 @@ max-requests = 1000                  ; Restart workers after this many requests
 max-worker-lifetime = 3600           ; Restart workers after this many seconds
 reload-on-rss = $reload_on_rss       ; Restart workers after this much resident memory
 worker-reload-mercy = 60             ; How long to wait before forcefully killing workers
+socket = /var/run/${dir_name}.sock
+chown-socket = www-data:www-data
+chmod-socket = 666
+uid = www-data
+gid = www-data
+chdir = $project_path
+module = ${dir_name}.wsgi
+virtualenv = $project_path/env
+env = DEBUG=no
+
 
 cheaper-algo = busyness
 processes = $(($cpu_cores * 2))      ; Maximum number of workers allowed
