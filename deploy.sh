@@ -69,11 +69,8 @@ vacuum = true                        ; Delete sockets during shutdown
 single-interpreter = true
 die-on-term = true                   ; Shutdown when receiving SIGTERM (default is respawn)
 need-app = true
-
-
-logger = file:logfile=$log_dir/stdout.log,maxsize=100000000,expr={status:lt(400)} ; 定义标准输出日志文件
-logger = file:logfile=$log_dir/stderr.log,maxsize=100000000,expr={status:ge(400)} ; 定义错误输出日志文件
-logformat=%(ltime) \"%(method) %(uri) %(proto)\" status=%(status) res-time=%(msecs)ms
+ignore-sigpipe = true
+ignore-write-errors = true
 
 harakiri = 60                        ; forcefully kill workers after 60 seconds,
 py-call-osafterfork = true           ; allow workers to trap signals
