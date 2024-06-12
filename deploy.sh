@@ -102,6 +102,17 @@ cheaper-busyness-min = 20            ; Below this threshold, kill workers (if st
 cheaper-busyness-max = 70            ; Above this threshold, spawn new workers
 cheaper-busyness-backlog-alert = 16  ; Spawn emergency workers if more than this many requests are waiting in the queue
 cheaper-busyness-backlog-step = 2    ; How many emergency workers to create if there are too many requests in the queue
+; 配置日志
+; 定义常规日志文件处理器
+logger = file_normal file:/path/to/normal.log
+; 定义错误日志文件处理器
+logger = file_error file:/path/to/error.log
+; 将状态码小于 400 的日志路由到常规日志文件
+log-route = file_normal ^\d+\.\d+\.\d+\.\d+:\d+\s+\d+\s+(1..|2..|3..)
+; 将状态码大于或等于 400 的日志路由到错误日志文件
+log-route = file_error ^\d+\.\d+\.\d+\.\d+:\d+\s+\d+\s+(4..|5..)
+; 定义日志格式
+logformat=%(ltime) \"%(method) %(uri) %(proto)\" status=%(status) res-time=%(msecs)ms
 "
 
 # 将内容写入 conf/uwsgi.ini 文件
