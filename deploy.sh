@@ -156,8 +156,6 @@ stopasgroup=true
 killasgroup=true
 stopwaitsecs=5
 autostart=true
-stderr_logfile=$log_dir/supervisor.log
-stdout_logfile=$log_dir/supervisor.log
 "
 
 # 定义 Supervisor 配置文件的路径
