@@ -35,8 +35,6 @@ if [ -z "$domain_name" ] || [ -z "$project_path" ]; then
     exit 1
 fi
 
-# 获取CPU核心数
-cpu_cores=$(nproc)
 
 # 更新软件包列表并安装必需的软件
 echo "正在更新软件包列表并安装必需的软件..."
@@ -54,25 +52,50 @@ sudo chmod -R 777 "$log_dir"
 echo "日志目录已创建并设置权限: $log_dir"
 
 # ---------------------------------------------------------------------------------------------------------
+# 获取CPU核心数
+cpu_cores=$(nproc)
+# 获取系统总内存大小（单位：MB）
+total_mem=$(free -m | awk '/^Mem:/{print $2}')
+# 计算 reload-on-rss 的值，例如设置为总内存的 25%
+# shellcheck disable=SC2004
+reload_on_rss=$(($total_mem / 4))
 # 构建 uwsgi.ini 文件的内容
+# 创建 uwsgi 配置字符串
 uwsgi_config="[uwsgi]
-chdir = $project_path
-module = ${dir_name}.wsgi
+strict = true
 master = true
-processes = $cpu_cores
-threads = $cpu_cores
-socket = /var/run/${dir_name}.sock
-vacuum = true
-die-on-term = true
-chown-socket = www-data:www-data
-chmod-socket = 666
-uid = www-data
-gid = www-data
-limit-post = 104857600
-virtualenv = $project_path/env
+enable-threads = true
+vacuum = true                        ; Delete sockets during shutdown
+single-interpreter = true
+die-on-term = true                   ; Shutdown when receiving SIGTERM (default is respawn)
+need-app = true
+
+disable-logging = true               ; Disable built-in logging, 禁用内置日志,提高性能
+;log-4xx = true                       ; but log 4xx's anyway, 但是仍然记录4xx
+;log-5xx = true                       ; and 5xx's, 以及5xx
 logto = $log_dir/uwsgi.log
-env = DEBUG=no
 logformat=%(ltime) \"%(method) %(uri) %(proto)\" status=%(status) res-time=%(msecs)ms
+
+harakiri = 60                        ; forcefully kill workers after 60 seconds,
+py-callos-afterfork = true           ; allow workers to trap signals
+
+max-requests = 1000                  ; Restart workers after this many requests
+max-worker-lifetime = 3600           ; Restart workers after this many seconds
+reload-on-rss = $reload_on_rss       ; Restart workers after this much resident memory
+worker-reload-mercy = 60             ; How long to wait before forcefully killing workers
+
+cheaper-algo = busyness
+processes = $(($cpu_cores * 2))      ; Maximum number of workers allowed
+cheaper = $cpu_cores
+cheaper-initial = $cpu_cores         ; Workers created at startup
+cheaper-overload = 1                 ; Length of a cycle in seconds
+cheaper-step = $cpu_cores            ; How many workers to spawn at a time
+
+cheaper-busyness-multiplier = 30     ; How many cycles to wait before killing workers
+cheaper-busyness-min = 20            ; Below this threshold, kill workers (if stable for multiplier cycles)
+cheaper-busyness-max = 70            ; Above this threshold, spawn new workers
+cheaper-busyness-backlog-alert = 16  ; Spawn emergency workers if more than this many requests are waiting in the queue
+cheaper-busyness-backlog-step = 2    ; How many emergency workers to create if there are too many requests in the queue
 "
 
 # 将内容写入 conf/uwsgi.ini 文件
