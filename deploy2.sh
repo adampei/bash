@@ -9,7 +9,10 @@ project_name=""
 while getopts ":d:p:n:" opt; do
   case $opt in
     d) domain_name="$OPTARG" ;;
-    p) project_path="${OPTARG%/}" ;;
+    p)
+       # 移除路径末尾的反斜线（如果存在）
+       project_path="${OPTARG%/}"
+       ;;
     n) project_name="$OPTARG" ;;
     \?) echo "无效的选项 -$OPTARG" >&2; exit 1 ;;
     :) echo "选项 -$OPTARG 需要参数." >&2; exit 1 ;;
@@ -17,10 +20,21 @@ while getopts ":d:p:n:" opt; do
 done
 
 # 检查必需参数
-if [ -z "$domain_name" ] || [ -z "$project_path" ] || [ -z "$project_name" ]; then
-    echo "缺少必需的参数。用法: $0 -d <域名> -p <项目路径> -n <项目名称>"
+if [ -z "$domain_name" ] || [ -z "$project_path" ]; then
+    echo "缺少必需的参数。用法: $0 -d <域名> -p <项目路径> [-n <项目名称>]"
+    echo "注意：如果不提供项目名称，将使用项目目录的名称。"
     exit 1
 fi
+
+# 如果没有提供项目名称，使用目录名
+if [ -z "$project_name" ]; then
+    project_name=$(basename "$project_path")
+fi
+
+# 输出处理后的信息（用于调试）
+echo "域名: $domain_name"
+echo "项目路径: $project_path"
+echo "项目名称: $project_name"
 
 # 更新和安装软件包
 echo "正在更新软件包列表并安装必需的软件..."
