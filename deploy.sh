@@ -3,253 +3,208 @@
 # 初始化变量
 domain_name=""
 project_path=""
+project_name=""
 
-# 循环遍历所有参数
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        --domain|-d)
-            domain_name="$2"
-            shift # 移过参数值
-            shift # 移过参数名
-            ;;
-        --path|-p)
-            project_path="$2"
-            shift # 移过参数值
-            shift # 移过参数名
-            ;;
-        *)
-            shift # 移过未知参数
-            ;;
-    esac
+# 解析命令行参数
+while getopts ":d:p:n:" opt; do
+  case $opt in
+    d) domain_name="$OPTARG" ;;
+    p)
+       # 移除路径末尾的反斜线（如果存在）
+       project_path="${OPTARG%/}"
+       ;;
+    n) project_name="$OPTARG" ;;
+    \?) echo "无效的选项 -$OPTARG" >&2; exit 1 ;;
+    :) echo "选项 -$OPTARG 需要参数." >&2; exit 1 ;;
+  esac
 done
 
-# 检查 project_path 是否以反斜线结尾，并去除它
-if [[ "$project_path" == */ ]]; then
-    project_path="${project_path%/}"
-fi
-
-# 检查是否所有必需的参数都被设置
+# 检查必需参数
 if [ -z "$domain_name" ] || [ -z "$project_path" ]; then
-    echo "缺少必需的参数。"
-    echo "用法: $0 --domain <域名> --path <项目路径>"
+    echo "缺少必需的参数。用法: $0 -d <域名> -p <项目路径> [-n <项目名称>]"
+    echo "注意：如果不提供项目名称，将使用项目目录的名称。"
     exit 1
 fi
 
+# 如果没有提供项目名称，使用目录名
+if [ -z "$project_name" ]; then
+    project_name=$(basename "$project_path")
+fi
 
-# 更新软件包列表并安装必需的软件
+# 输出处理后的信息（用于调试）
+echo "域名: $domain_name"
+echo "项目路径: $project_path"
+echo "项目名称: $project_name"
+
+# 更新和安装软件包
 echo "正在更新软件包列表并安装必需的软件..."
-sudo apt-get update
-sudo apt-get install -y nginx supervisor python3-venv build-essential python3-dev
+sudo apt-get update && sudo apt-get install -y nginx supervisor python3-venv build-essential python3-dev
 
-
-# 从提供的路径中获取项目名称（假设路径的最后一部分是项目名称）
-dir_name=$(basename "$project_path")
-
-# 创建日志目录并设置权限
+# 设置项目变量
 log_dir="$project_path/log"
+socket_path="/var/run/$project_name.sock"
+
+# 创建日志目录
 mkdir -p "$log_dir"
-sudo chmod -R 777 "$log_dir"
-echo "日志目录已创建并设置权限: $log_dir"
 
-# ---------------------------------------------------------------------------------------------------------
-# 获取CPU核心数
+# 获取系统信息
 cpu_cores=$(nproc)
-# 获取系统总内存大小（单位：MB）
-total_mem=$(free -m | awk '/^Mem:/{print $2}')
-# 计算 reload-on-rss 的值，例如设置为总内存的 25%
-# shellcheck disable=SC2004
-reload_on_rss=$(($total_mem / 4))
-# 构建 uwsgi.ini 文件的内容
-# 创建 uwsgi 配置字符串
-uwsgi_config="[uwsgi]
-strict = true
-master = true
-enable-threads = true
-vacuum = true                        ; Delete sockets during shutdown
-single-interpreter = true
-die-on-term = true                   ; Shutdown when receiving SIGTERM (default is respawn)
-need-app = true
-ignore-sigpipe = true
-ignore-write-errors = true
+gunicorn_workers=$((2 * cpu_cores + 1))
 
-harakiri = 60                        ; forcefully kill workers after 60 seconds,
-py-call-osafterfork = true           ; allow workers to trap signals
+# 配置 Gunicorn
+gunicorn_config="import multiprocessing
 
-max-requests = 1000                  ; Restart workers after this many requests
-max-worker-lifetime = 3600           ; Restart workers after this many seconds
-reload-on-rss = $reload_on_rss       ; Restart workers after this much resident memory
-worker-reload-mercy = 60             ; How long to wait before forcefully killing workers
-socket = /var/run/${dir_name}.sock
-chown-socket = www-data:www-data
-chmod-socket = 666
-uid = www-data
-gid = www-data
-chdir = $project_path
-module = ${dir_name}.wsgi
-virtualenv = $project_path/env
-env = DEBUG=no
+bind = 'unix:$socket_path'
+workers = $gunicorn_workers
+worker_class = 'gevent'
+worker_connections = 1000
+timeout = 30
+keepalive = 2
 
+errorlog = '${log_dir}/gunicorn_error.log'
+accesslog = '${log_dir}/gunicorn_access.log'
+loglevel = 'info'
 
-cheaper-algo = busyness
-processes = $(($cpu_cores * 2))      ; Maximum number of workers allowed
-cheaper = $cpu_cores
-cheaper-initial = $cpu_cores         ; Workers created at startup
-cheaper-overload = 1                 ; Length of a cycle in seconds
-cheaper-step = $cpu_cores            ; How many workers to spawn at a time
+proc_name = '${project_name}_gunicorn'
 
-cheaper-busyness-multiplier = 30     ; How many cycles to wait before killing workers
-cheaper-busyness-min = 20            ; Below this threshold, kill workers (if stable for multiplier cycles)
-cheaper-busyness-max = 70            ; Above this threshold, spawn new workers
-cheaper-busyness-backlog-alert = 16  ; Spawn emergency workers if more than this many requests are waiting in the queue
-cheaper-busyness-backlog-step = 2    ; How many emergency workers to create if there are too many requests in the queue
+# 设置用户和组
+user = 'www-data'
+group = 'www-data'
+
+# 设置 umask 以确保正确的文件权限
+umask = 0o002
 "
 
-# 将内容写入 conf/uwsgi.ini 文件
 mkdir -p "$project_path/conf"
-echo "$uwsgi_config" > "$project_path/conf/uwsgi.ini"
+echo "$gunicorn_config" > "$project_path/conf/gunicorn.py"
+echo "Gunicorn 配置文件已保存到 $project_path/conf/gunicorn.py"
 
-echo -e "\033[32muwsgi 配置文件已保存到 $project_path/conf/uwsgi.ini\033[0m"
-
-# ---------------------------------------------------------------------------------------------------------
-# 构建 Nginx 配置文件的内容
+# Nginx 配置
 nginx_config="server {
     server_name $domain_name www.$domain_name;
     listen 80;
     listen [::]:80;
     client_max_body_size 100M;
+
     location / {
-        include uwsgi_params;
-        uwsgi_connect_timeout 30;
-        uwsgi_pass unix:/var/run/${dir_name}.sock;
+        proxy_pass http://unix:$socket_path;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
     }
+
     location /static/ {
         alias $project_path/static/;
         expires 4h;
     }
+
     location /media/ {
         alias $project_path/media/;
     }
-    location /robots.txt {
-        alias $project_path/static/root/robots.txt;
-    }
-    location /sitemap.xml {
-        alias $project_path/static/root/sitemap.xml;
-    }
-    location /ads.txt {
-        alias $project_path/static/root/ads.txt;
+
+    location ~ ^/(robots\.txt|sitemap\.xml|ads\.txt)$ {
+        root $project_path/static/root;
     }
 }"
 
-# 定义 Nginx 配置文件的路径，使用项目目录名称作为文件名
-nginx_config_file="/etc/nginx/sites-enabled/${dir_name}.conf"
-
-# 使用 sudo 权限将配置内容写入文件
+nginx_config_file="/etc/nginx/sites-enabled/${project_name}.conf"
 echo "$nginx_config" | sudo tee "$nginx_config_file" > /dev/null
-
-# 重启 Nginx
 sudo systemctl restart nginx
+echo "Nginx 配置文件已保存并重启服务"
 
-echo -e "\033[32mNginx 配置文件已保存到  $nginx_config_file  ,并且 Nginx 已重启。\033[0m"
-
-# ---------------------------------------------------------------------------------------------------------
-# 构建 Supervisor 配置文件的内容
-supervisor_config="[program:${dir_name}]
-command=${project_path}/env/bin/uwsgi --ini ${project_path}/conf/uwsgi.ini
+# Supervisor 配置
+supervisor_config="[program:${project_name}]
+command=${project_path}/env/bin/gunicorn ${project_name}.wsgi:application -c ${project_path}/conf/gunicorn.py
 directory=${project_path}
-autorestart=true
-startsecs=1
-stopasgroup=true
-killasgroup=true
-stopwaitsecs=5
+user=www-data
 autostart=true
+autorestart=true
+redirect_stderr=true
+stdout_logfile=${log_dir}/gunicorn_supervisor.log
 "
 
-# 定义 Supervisor 配置文件的路径
-supervisor_config_path="/etc/supervisor/conf.d"
-supervisor_config_file="${supervisor_config_path}/${dir_name}.conf"
-
-# 确保目录存在
-sudo mkdir -p "$supervisor_config_path"
-
-# 使用 sudo 权限将配置内容写入文件
+supervisor_config_file="/etc/supervisor/conf.d/${project_name}.conf"
 echo "$supervisor_config" | sudo tee "$supervisor_config_file" > /dev/null
+echo "Supervisor 配置文件已保存"
 
-echo -e "\033[32mSupervisor 配置文件已保存到 $supervisor_config_file\033[0m"
-
-# ---------------------------------------------------------------------------------------------------------
-# 构建 Celery Supervisor 配置文件的内容
-# 检查 run_celery.sh 是否存在
+# Celery 配置（如果需要）
+# Celery 配置（如果需要）
 if [ -f "$project_path/run_celery.sh" ]; then
-  echo "正在停止旧的 Celery 进程..."
-  sudo supervisorctl stop "${dir_name}_celery"
-  sleep 5  # 等待旧进程停止
+    echo "检测到 run_celery.sh，配置 Celery..."
 
-  # 安装 Redis
-  echo "正在安装 Redis..."
-  sudo apt-get install -y redis-server
+    # 检查 Redis 是否已安装
+    if ! command -v redis-cli &> /dev/null; then
+        echo "Redis 未安装，正在安装..."
+        sudo apt-get update
+        sudo apt-get install -y redis-server
+        sudo systemctl enable redis-server
+        sudo systemctl start redis-server
+    else
+        echo "Redis 已安装"
+    fi
 
-  # 启动 Redis 服务
-  sudo systemctl start redis-server
-  sudo systemctl enable redis-server
-  sudo systemctl status redis-server
-  echo -e "\033[32mRedis 服务已启动。\033[0m"
-#  睡眠2秒
-  sleep 2
-  echo "正在配置 Celery 进程守护"
-    # 构建 Celery Supervisor 配置文件的内容
-  celery_supervisor_config="[program:${dir_name}_celery]
-command=bash $project_path/run_celery.sh
+    # 确保 Redis 服务正在运行
+    if ! systemctl is-active --quiet redis-server; then
+        echo "启动 Redis 服务..."
+        sudo systemctl start redis-server
+    fi
+
+    celery_supervisor_config="
+[program:${project_name}_celery]
+command=/bin/bash $project_path/run_celery.sh
 directory=$project_path
+user=www-data
 autostart=true
 autorestart=true
-startsecs=1
-stopasgroup=true
-killasgroup=true
-user=www-data
-numprocs=1
 redirect_stderr=true
 stdout_logfile=$log_dir/celery.log
 stderr_logfile=$log_dir/celery_error.log
 "
-    # 写入 Celery Supervisor 配置文件
     echo "$celery_supervisor_config" | sudo tee -a "$supervisor_config_file" > /dev/null
-
-    echo -e "\033[32mCelery Supervisor 配置已添加。\033[0m"
-else
-    echo -e "\033[33m未找到 run_celery.sh，跳过 Celery 配置。\033[0m"
+    echo "Celery 配置已添加"
 fi
 
-#---------------------------------------------------------------------------------------------------------
-# 设置日志轮换
-echo -e "\033[32m设置日志轮换\033[0m"
-sleep 1
-# 定义 logrotate 配置文件内容
-logrotate_config="/var/log/${dir_name}/*.log {
+# 日志轮换配置
+logrotate_config="/var/log/${project_name}/*.log {
     weekly
     rotate 14
     compress
-    delaycompress        # 延迟压缩
-    missingok            # 如果日志文件丢失不报错
-    notifempty           # 日志文件为空不轮换
+    delaycompress
+    missingok
+    notifempty
+    create 0660 www-data www-data
     sharedscripts
     postrotate
-        if [ -f /var/run/${dir_name}.pid ]; then
-            kill -USR1 \`cat /var/run/${dir_name}.pid\`
+        if [ -f /var/run/supervisor.sock ]; then
+            supervisorctl signal HUP ${project_name}:*
         fi
     endscript
 }"
 
-echo "$logrotate_config" | sudo tee "/etc/logrotate.d/$dir_name" > /dev/null
-echo -e "\033[32m日志轮换配置已保存到 /etc/logrotate.d/$dir_name\033[0m"
-echo -e "\033[32m执行测试日志轮换命令\033[0m"
-# 测试 logrotate 配置是否有语法错误
-sudo logrotate -v /etc/logrotate.d/"$dir_name"
-sleep 1
-echo -e "\033[32m日志轮换配置测试完成\033[0m"
+echo "$logrotate_config" | sudo tee "/etc/logrotate.d/$project_name" > /dev/null
+sudo logrotate -d "/etc/logrotate.d/$project_name"
+
+# 设置项目目录的权限
+echo "设置项目目录权限..."
+sudo chown -R www-data:www-data "$project_path"
+sudo chmod -R 775 "$project_path"
+
+# 确保 socket 文件目录存在并具有正确的权限
+sudo mkdir -p /var/run
+sudo chown root:www-data /var/run
+sudo chmod 775 /var/run
 
 # 重新加载 Supervisor 配置
 sudo supervisorctl reread
 sudo supervisorctl update
 sudo supervisorctl restart all
 
-echo -e "\033[32msupervisor配置文件加载完成,supervisor重启完毕\033[0m"
+echo "部署完成！请检查服务是否正常运行。"
+
+# 显示一些有用的命令
+echo "
+一些有用的命令：
+查看 Gunicorn 错误日志: sudo tail -f ${log_dir}/gunicorn_error.log
+查看 Supervisor 日志: sudo tail -f ${log_dir}/gunicorn_supervisor.log
+重启 Gunicorn: sudo supervisorctl restart ${project_name}
+重启 Nginx: sudo systemctl restart nginx
+"
