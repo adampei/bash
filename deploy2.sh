@@ -113,14 +113,30 @@ echo "$supervisor_config" | sudo tee "$supervisor_config_file" > /dev/null
 echo "Supervisor 配置文件已保存"
 
 # Celery 配置（如果需要）
+# Celery 配置（如果需要）
 if [ -f "$project_path/run_celery.sh" ]; then
-    echo "配置 Celery..."
-    sudo apt-get install -y redis-server
-    sudo systemctl enable --now redis-server
+    echo "检测到 run_celery.sh，配置 Celery..."
+
+    # 检查 Redis 是否已安装
+    if ! command -v redis-cli &> /dev/null; then
+        echo "Redis 未安装，正在安装..."
+        sudo apt-get update
+        sudo apt-get install -y redis-server
+        sudo systemctl enable redis-server
+        sudo systemctl start redis-server
+    else
+        echo "Redis 已安装"
+    fi
+
+    # 确保 Redis 服务正在运行
+    if ! systemctl is-active --quiet redis-server; then
+        echo "启动 Redis 服务..."
+        sudo systemctl start redis-server
+    fi
 
     celery_supervisor_config="
 [program:${project_name}_celery]
-command=bash $project_path/run_celery.sh
+command=/bin/bash $project_path/run_celery.sh
 directory=$project_path
 user=www-data
 autostart=true
