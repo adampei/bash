@@ -1,210 +1,180 @@
 #!/bin/bash
 
-# 初始化变量
-domain_name=""
-project_path=""
-project_name=""
-
-# 解析命令行参数
-while getopts ":d:p:n:" opt; do
-  case $opt in
-    d) domain_name="$OPTARG" ;;
-    p)
-       # 移除路径末尾的反斜线（如果存在）
-       project_path="${OPTARG%/}"
-       ;;
-    n) project_name="$OPTARG" ;;
-    \?) echo "无效的选项 -$OPTARG" >&2; exit 1 ;;
-    :) echo "选项 -$OPTARG 需要参数." >&2; exit 1 ;;
-  esac
-done
-
-# 检查必需参数
-if [ -z "$domain_name" ] || [ -z "$project_path" ]; then
-    echo "缺少必需的参数。用法: $0 -d <域名> -p <项目路径> [-n <项目名称>]"
-    echo "注意：如果不提供项目名称，将使用项目目录的名称。"
+# 确保脚本以root权限运行
+if [ "$EUID" -ne 0 ]; then 
+    echo "Please run as root"
     exit 1
 fi
 
-# 如果没有提供项目名称，使用目录名
-if [ -z "$project_name" ]; then
-    project_name=$(basename "$project_path")
+# 交互式配置
+read -p "请输入项目域名 (例如: example.com): " DOMAIN_NAME
+read -p "请输入Git仓库地址: " GIT_REPO
+read -p "请输入项目安装路径 [/opt]: " BASE_PATH
+BASE_PATH=${BASE_PATH:-/opt}
+
+# 设置基础变量
+SOCKET_PATH="/run"
+WORKERS=3
+
+# 安装必要的系统包
+apt-get update
+apt-get install -y python3-venv python3-pip nginx git
+
+# 配置Git
+git config --global core.fileMode true
+
+# 克隆项目并获取项目名
+cd ${BASE_PATH}
+echo "正在克隆项目..."
+git clone ${GIT_REPO}
+if [ $? -ne 0 ]; then
+    echo "Git克隆失败!"
+    exit 1
 fi
 
-# 输出处理后的信息（用于调试）
-echo "域名: $domain_name"
-echo "项目路径: $project_path"
-echo "项目名称: $project_name"
+# 自动获取项目文件夹名作为项目名
+PROJECT_NAME=$(basename `ls -td ${BASE_PATH}/*/ | head -1`)
+PROJECT_PATH="${BASE_PATH}/${PROJECT_NAME}"
+VIRTUAL_ENV="${PROJECT_PATH}/venv"
+SOCKET_FILE="${SOCKET_PATH}/${PROJECT_NAME}.sock"
 
-# 更新和安装软件包
-echo "正在更新软件包列表并安装必需的软件..."
-sudo apt-get update && sudo apt-get install -y nginx supervisor python3-venv build-essential python3-dev
+echo "配置信息:"
+echo "域名: ${DOMAIN_NAME}"
+echo "Git仓库: ${GIT_REPO}"
+echo "项目名称: ${PROJECT_NAME}"
+echo "项目路径: ${PROJECT_PATH}"
+read -p "确认以上信息正确? [y/N] " CONFIRM
+if [[ $CONFIRM != "y" && $CONFIRM != "Y" ]]; then
+    echo "已取消部署"
+    rm -rf ${PROJECT_PATH}  # 清理已克隆的代码
+    exit 1
+fi
 
-# 设置项目变量
-log_dir="$project_path/log"
-socket_path="/var/run/$project_name.sock"
+# 创建必要的目录并设置权限
+mkdir -p ${PROJECT_PATH}/static
+mkdir -p ${PROJECT_PATH}/media
+# 设置目录权限为755 (rwxr-xr-x)
+chmod -R 755 ${PROJECT_PATH}
+# 确保 media 目录可写
+chmod -R 777 ${PROJECT_PATH}/media
 
-# 创建日志目录
-mkdir -p "$log_dir"
+# 创建并激活虚拟环境
+python3 -m venv ${VIRTUAL_ENV}
+source ${VIRTUAL_ENV}/bin/activate
 
-# 获取系统信息
-cpu_cores=$(nproc)
-gunicorn_workers=$((2 * cpu_cores + 1))
+# 安装依赖
+if [ -f "${PROJECT_PATH}/requirements.txt" ]; then
+    echo "正在安装项目依赖..."
+    pip install -r ${PROJECT_PATH}/requirements.txt
+else
+    echo "未找到requirements.txt，安装基本依赖..."
+    pip install django gunicorn
+fi
 
-# 配置 Gunicorn
-gunicorn_config="import multiprocessing
+# 创建 gunicorn.service
+cat > /etc/systemd/system/${PROJECT_NAME}.service << EOL
+[Unit]
+Description=Gunicorn daemon for ${PROJECT_NAME}
+After=network.target
 
-bind = 'unix:$socket_path'
-workers = $gunicorn_workers
-worker_class = 'gevent'
-worker_connections = 1000
-timeout = 30
-keepalive = 2
+[Service]
+User=root
+Group=root
+WorkingDirectory=${PROJECT_PATH}
+ExecStart=${VIRTUAL_ENV}/bin/gunicorn \
+    --workers ${WORKERS} \
+    --bind unix:${SOCKET_FILE} \
+    ${PROJECT_NAME}.wsgi:application
+Restart=always
+RestartSec=3
 
-errorlog = '${log_dir}/gunicorn_error.log'
-accesslog = '${log_dir}/gunicorn_access.log'
-loglevel = 'info'
+[Install]
+WantedBy=multi-user.target
+EOL
 
-proc_name = '${project_name}_gunicorn'
-
-# 设置用户和组
-user = 'www-data'
-group = 'www-data'
-
-# 设置 umask 以确保正确的文件权限
-umask = 0o002
-"
-
-mkdir -p "$project_path/conf"
-echo "$gunicorn_config" > "$project_path/conf/gunicorn.py"
-echo "Gunicorn 配置文件已保存到 $project_path/conf/gunicorn.py"
-
-# Nginx 配置
-nginx_config="server {
-    server_name $domain_name www.$domain_name;
+# 直接创建 Nginx 配置到 sites-enabled
+cat > /etc/nginx/sites-enabled/${PROJECT_NAME}.conf << EOL
+server {
     listen 80;
-    listen [::]:80;
-    client_max_body_size 100M;
+    server_name ${DOMAIN_NAME};
 
-    location / {
-        proxy_pass http://unix:$socket_path;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
+    access_log /var/log/nginx/${PROJECT_NAME}_access.log;
+    error_log /var/log/nginx/${PROJECT_NAME}_error.log;
+
+    location = /favicon.ico { 
+        access_log off; 
+        log_not_found off; 
     }
 
     location /static/ {
-        alias $project_path/static/;
-        expires 4h;
+        alias ${PROJECT_PATH}/static/;
+        expires 30d;
+        access_log off;
     }
 
     location /media/ {
-        alias $project_path/media/;
+        alias ${PROJECT_PATH}/media/;
+        expires 30d;
+        access_log off;
     }
 
-    location ~ ^/(robots\.txt|sitemap\.xml|ads\.txt)$ {
-        root $project_path/static/root;
+    location / {
+        proxy_pass http://unix:${SOCKET_FILE};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
     }
-}"
 
-nginx_config_file="/etc/nginx/sites-enabled/${project_name}.conf"
-echo "$nginx_config" | sudo tee "$nginx_config_file" > /dev/null
-sudo systemctl restart nginx
-echo "Nginx 配置文件已保存并重启服务"
+    # 基本安全配置
+    add_header X-Content-Type-Options nosniff;
+    add_header X-XSS-Protection "1; mode=block";
+    add_header X-Frame-Options DENY;
+}
+EOL
 
-# Supervisor 配置
-supervisor_config="[program:${project_name}]
-command=${project_path}/env/bin/gunicorn ${project_name}.wsgi:application -c ${project_path}/conf/gunicorn.py
-directory=${project_path}
-user=www-data
-autostart=true
-autorestart=true
-redirect_stderr=true
-stdout_logfile=${log_dir}/gunicorn_supervisor.log
-"
+# 确保nginx配置正确
+nginx -t
 
-supervisor_config_file="/etc/supervisor/conf.d/${project_name}.conf"
-echo "$supervisor_config" | sudo tee "$supervisor_config_file" > /dev/null
-echo "Supervisor 配置文件已保存"
+# 收集静态文件
+echo "正在收集静态文件..."
+cd ${PROJECT_PATH}
+${VIRTUAL_ENV}/bin/python manage.py collectstatic --noinput
 
-# Celery 配置（如果需要）
-# Celery 配置（如果需要）
-if [ -f "$project_path/run_celery.sh" ]; then
-    echo "检测到 run_celery.sh，配置 Celery..."
+# 启动服务
+systemctl daemon-reload
+systemctl start ${PROJECT_NAME}
+systemctl enable ${PROJECT_NAME}
+systemctl restart nginx
 
-    # 检查 Redis 是否已安装
-    if ! command -v redis-cli &> /dev/null; then
-        echo "Redis 未安装，正在安装..."
-        sudo apt-get update
-        sudo apt-get install -y redis-server
-        sudo systemctl enable redis-server
-        sudo systemctl start redis-server
-    else
-        echo "Redis 已安装"
-    fi
+# 检查服务状态
+echo "正在检查服务状态..."
+systemctl status ${PROJECT_NAME}
+systemctl status nginx
 
-    # 确保 Redis 服务正在运行
-    if ! systemctl is-active --quiet redis-server; then
-        echo "启动 Redis 服务..."
-        sudo systemctl start redis-server
-    fi
+echo -e "\n部署完成!"
+echo "请检查以下事项:"
+echo "1. 确保域名 ${DOMAIN_NAME} 已经正确解析到服务器"
+echo "2. 检查 Django settings.py 中的生产环境配置:"
+echo "   STATIC_ROOT = '${PROJECT_PATH}/static'"
+echo "   MEDIA_ROOT = '${PROJECT_PATH}/media'"
+echo "   ALLOWED_HOSTS = ['${DOMAIN_NAME}']"
+echo "3. 考虑配置 SSL 证书"
+echo "4. 检查日志文件: "
+echo "   - Nginx 日志: /var/log/nginx/${PROJECT_NAME}_access.log"
+echo "   - Nginx 错误日志: /var/log/nginx/${PROJECT_NAME}_error.log"
+echo "   - Gunicorn 日志: journalctl -u ${PROJECT_NAME}"
 
-    celery_supervisor_config="
-[program:${project_name}_celery]
-command=/bin/bash $project_path/run_celery.sh
-directory=$project_path
-user=www-data
-autostart=true
-autorestart=true
-redirect_stderr=true
-stdout_logfile=$log_dir/celery.log
-stderr_logfile=$log_dir/celery_error.log
-"
-    echo "$celery_supervisor_config" | sudo tee -a "$supervisor_config_file" > /dev/null
-    echo "Celery 配置已添加"
-fi
-
-# 日志轮换配置
-logrotate_config="/var/log/${project_name}/*.log {
-    weekly
-    rotate 14
-    compress
-    delaycompress
-    missingok
-    notifempty
-    create 0660 www-data www-data
-    sharedscripts
-    postrotate
-        if [ -f /var/run/supervisor.sock ]; then
-            supervisorctl signal HUP ${project_name}:*
-        fi
-    endscript
-}"
-
-echo "$logrotate_config" | sudo tee "/etc/logrotate.d/$project_name" > /dev/null
-sudo logrotate -d "/etc/logrotate.d/$project_name"
-
-# 设置项目目录的权限
-echo "设置项目目录权限..."
-sudo chown -R www-data:www-data "$project_path"
-sudo chmod -R 775 "$project_path"
-
-# 确保 socket 文件目录存在并具有正确的权限
-sudo mkdir -p /var/run
-sudo chown root:www-data /var/run
-sudo chmod 775 /var/run
-
-# 重新加载 Supervisor 配置
-sudo supervisorctl reread
-sudo supervisorctl update
-sudo supervisorctl restart all
-
-echo "部署完成！请检查服务是否正常运行。"
-
-# 显示一些有用的命令
-echo "
-一些有用的命令：
-查看 Gunicorn 错误日志: sudo tail -f ${log_dir}/gunicorn_error.log
-查看 Supervisor 日志: sudo tail -f ${log_dir}/gunicorn_supervisor.log
-重启 Gunicorn: sudo supervisorctl restart ${project_name}
-重启 Nginx: sudo systemctl restart nginx
-"
+# 显示常用命令
+echo -e "\n常用命令:"
+echo "重启 Django 服务: systemctl restart ${PROJECT_NAME}"
+echo "查看 Django 日志: journalctl -u ${PROJECT_NAME}"
+echo "重启 Nginx: systemctl restart nginx"
+echo "更新代码:"
+echo "  cd ${PROJECT_PATH}"
+echo "  git pull"
+echo "  systemctl restart ${PROJECT_NAME}"
