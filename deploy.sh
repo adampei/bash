@@ -14,7 +14,7 @@ BASE_PATH=${BASE_PATH:-/opt}
 
 # 设置基础变量
 SOCKET_PATH="/run"
-WORKERS=3
+WORKERS=1
 
 # 安装必要的系统包
 apt-get update
@@ -63,13 +63,23 @@ python3 -m venv ${VIRTUAL_ENV}
 source ${VIRTUAL_ENV}/bin/activate
 
 # 安装依赖
+# 安装依赖
 if [ -f "${PROJECT_PATH}/requirements.txt" ]; then
     echo "正在安装项目依赖..."
-    pip install -r ${PROJECT_PATH}/requirements.txt
+    if ! pip install -r ${PROJECT_PATH}/requirements.txt; then
+        echo "错误: 安装依赖失败"
+        echo "pip install 输出:"
+        pip install -r ${PROJECT_PATH}/requirements.txt
+        exit 1
+    fi
 else
     echo "未找到requirements.txt，安装基本依赖..."
-    pip install django gunicorn
+    if ! pip install django gunicorn; then
+        echo "错误: 安装基本依赖失败"
+        exit 1
+    fi
 fi
+
 
 # 创建 gunicorn.service
 cat > /etc/systemd/system/${PROJECT_NAME}.service << EOL
@@ -80,6 +90,7 @@ After=network.target
 [Service]
 User=root
 Group=root
+Environment="DEBUG=False"
 WorkingDirectory=${PROJECT_PATH}
 ExecStart=${VIRTUAL_ENV}/bin/gunicorn \
     --workers ${WORKERS} \
@@ -92,14 +103,31 @@ RestartSec=3
 WantedBy=multi-user.target
 EOL
 
+# 执行数据库迁移
+echo "正在执行数据库迁移..."
+cd ${PROJECT_PATH}
+if ! ${VIRTUAL_ENV}/bin/python manage.py migrate --noinput; then
+    echo "错误: 数据库迁移失败"
+    echo "migrate 输出:"
+    ${VIRTUAL_ENV}/bin/python manage.py migrate --noinput
+    exit 1
+fi
+
+# 收集静态文件
+echo "正在收集静态文件..."
+if ! ${VIRTUAL_ENV}/bin/python manage.py collectstatic --noinput; then
+    echo "错误: 静态文件收集失败"
+    echo "collectstatic 输出:"
+    ${VIRTUAL_ENV}/bin/python manage.py collectstatic --noinput
+    exit 1
+fi
+
+
 # 直接创建 Nginx 配置到 sites-enabled
 cat > /etc/nginx/sites-enabled/${PROJECT_NAME}.conf << EOL
 server {
     listen 80;
     server_name ${DOMAIN_NAME};
-
-    access_log /var/log/nginx/${PROJECT_NAME}_access.log;
-    error_log /var/log/nginx/${PROJECT_NAME}_error.log;
 
     location = /favicon.ico { 
         access_log off; 
@@ -138,12 +166,10 @@ server {
 EOL
 
 # 确保nginx配置正确
-nginx -t
-
-# 收集静态文件
-echo "正在收集静态文件..."
-cd ${PROJECT_PATH}
-${VIRTUAL_ENV}/bin/python manage.py collectstatic --noinput
+if ! nginx -t; then
+    echo "错误: Nginx配置检查失败"
+    exit 1
+fi
 
 # 启动服务
 systemctl daemon-reload
