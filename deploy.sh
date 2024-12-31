@@ -25,16 +25,38 @@ git config --global core.fileMode true
 
 # 克隆项目并获取项目名
 cd ${BASE_PATH}
-echo "正在克隆项目..."
-git clone ${GIT_REPO}
-if [ $? -ne 0 ]; then
-    echo "Git克隆失败!"
-    exit 1
-fi
+echo "正在检查项目..."
 
 # 自动获取项目文件夹名作为项目名
-PROJECT_NAME=$(basename `ls -td ${BASE_PATH}/*/ | head -1`)
+PROJECT_NAME=$(basename ${GIT_REPO%.git})
 PROJECT_PATH="${BASE_PATH}/${PROJECT_NAME}"
+
+# 检查项目是否已存在
+if [ -d "${PROJECT_PATH}/.git" ]; then
+    echo "项目已存在，正在更新代码..."
+    cd ${PROJECT_PATH}
+    # 强制更新，覆盖本地所有更改
+    git fetch --all
+    git reset --hard origin/main  # 如果你的主分支是 master，请将 main 改为 master
+    if ! git pull --force; then
+        echo "Git pull 失败!"
+        exit 1
+    fi
+else
+    echo "正在克隆项目..."
+    git clone ${GIT_REPO}
+    if [ $? -ne 0 ]; then
+        echo "Git克隆失败!"
+        exit 1
+    fi
+fi
+
+# 自动获取项目文件夹名作为项目名（如果是新克隆的项目）
+if [ -z "${PROJECT_NAME}" ]; then
+    PROJECT_NAME=$(basename `ls -td ${BASE_PATH}/*/ | head -1`)
+    PROJECT_PATH="${BASE_PATH}/${PROJECT_NAME}"
+fi
+
 VIRTUAL_ENV="${PROJECT_PATH}/venv"
 SOCKET_FILE="${SOCKET_PATH}/${PROJECT_NAME}.sock"
 
