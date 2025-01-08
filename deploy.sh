@@ -92,6 +92,8 @@ if [ -f "${PROJECT_PATH}/requirements.txt" ]; then
         echo "错误: 安装依赖失败"
         echo "pip install 输出:"
         pip install -r ${PROJECT_PATH}/requirements.txt
+        # 安装Django, Gunicorn
+        pip install django gunicorn
         exit 1
     fi
 else
